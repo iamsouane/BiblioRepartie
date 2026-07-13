@@ -17,7 +17,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { OuvrageGlobal } from "@/lib/types"
+
+// Type pour les résultats de recherche
+interface RechercheResult {
+  idOuv: number
+  titre: string
+  auteurId: number
+  editeur: string
+  annee: number
+  domaine: string
+  stock: number
+  site: string
+}
 
 export default function RecherchePage() {
   return (
@@ -30,7 +41,7 @@ export default function RecherchePage() {
 function Recherche() {
   const { site, api } = useSite()
   const [q, setQ] = useState("")
-  const [results, setResults] = useState<OuvrageGlobal[] | null>(null)
+  const [results, setResults] = useState<any[] | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function search(e?: React.FormEvent) {
@@ -42,8 +53,10 @@ function Recherche() {
     setLoading(true)
     try {
       const res = await api.rechercheGlobale(site, q.trim())
+      console.log("Résultats bruts:", res)
       setResults(res)
     } catch (err) {
+      console.error("Erreur:", err)
       toast.error((err as Error).message)
       setResults([])
     } finally {
@@ -51,8 +64,10 @@ function Recherche() {
     }
   }
 
+  // Grouper les résultats par site
   const grouped = (results ?? []).reduce<Record<string, number>>((acc, o) => {
-    acc[o.siteSource] = (acc[o.siteSource] ?? 0) + 1
+    const siteKey = o.site || o.siteSource || "UGB"
+    acc[siteKey] = (acc[siteKey] ?? 0) + 1
     return acc
   }, {})
 
@@ -117,21 +132,38 @@ function Recherche() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {results.map((o) => (
-                    <TableRow key={`${o.siteSource}-${o.id}`}>
-                      <TableCell className="font-mono text-muted-foreground">{o.id}</TableCell>
-                      <TableCell className="font-medium">{o.titre}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {o.auteurPrenom ? `${o.auteurPrenom} ${o.auteurNom}` : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <SiteBadge site={o.siteSource} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DispoBadge disponible={o.disponible} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {results.map((o) => {
+                    // Utiliser les bonnes propriétés selon le format
+                    const id = o.idOuv || o.id || o.idOuvrage || "—"
+                    const titre = o.titre || "Sans titre"
+                    const siteSource = o.site || o.siteSource || "UGB"
+                    const disponible = o.disponible !== undefined ? o.disponible : (o.stock || 0) > 0
+                    const auteur = o.auteurNom || o.nomAuteur || (o.auteurId ? `Auteur #${o.auteurId}` : "—")
+                    
+                    return (
+                      <TableRow key={`${siteSource}-${id}`}>
+                        <TableCell className="font-mono text-muted-foreground">{id}</TableCell>
+                        <TableCell className="font-medium">{titre}</TableCell>
+                        <TableCell className="text-muted-foreground">{auteur}</TableCell>
+                        <TableCell>
+                          <SiteBadge site={siteSource} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {disponible ? (
+                            <span className="inline-flex items-center gap-1 text-green-600">
+                              <span className="size-2 rounded-full bg-green-600" />
+                              Disponible
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-red-600">
+                              <span className="size-2 rounded-full bg-red-600" />
+                              Indisponible
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}

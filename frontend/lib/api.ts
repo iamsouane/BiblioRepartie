@@ -44,13 +44,11 @@ export function createApi(ctx: ApiContext) {
   const isDemo = ctx.mode === "demo"
 
   return {
-    // Site Info - Endpoint: GET /api/site
     async getSiteInfo(site: SiteCode): Promise<SiteInfo> {
       if (isDemo) return await delay().then(() => demoStore.getSiteInfo(site))
       return req<SiteInfo>(base(site), "/api/site")
     },
 
-    // Employes - Endpoint: GET /api/employes
     async getEmployes(site: SiteCode): Promise<Employe[]> {
       if (isDemo) return await delay().then(() => demoStore.getEmployes(site))
       return req<Employe[]>(base(site), "/api/employes")
@@ -64,7 +62,6 @@ export function createApi(ctx: ApiContext) {
       return req<void>(base(site), `/api/employes/${id}`, { method: "DELETE" })
     },
 
-    // Etudiants - Endpoint: GET /api/etudiants
     async getEtudiants(site: SiteCode): Promise<Etudiant[]> {
       if (isDemo) return await delay().then(() => demoStore.getEtudiants(site))
       return req<Etudiant[]>(base(site), "/api/etudiants")
@@ -77,7 +74,6 @@ export function createApi(ctx: ApiContext) {
       return req<Etudiant>(base(site), "/api/etudiants", { method: "POST", body: JSON.stringify(data) })
     },
 
-    // Ouvrages - Endpoint: GET /api/ouvrages
     async getOuvrages(site: SiteCode): Promise<Ouvrage[]> {
       if (isDemo) return await delay().then(() => demoStore.getOuvrages(site))
       return req<Ouvrage[]>(base(site), "/api/ouvrages")
@@ -87,13 +83,45 @@ export function createApi(ctx: ApiContext) {
       return req<Ouvrage>(base(site), "/api/ouvrages", { method: "POST", body: JSON.stringify(data) })
     },
 
-    // Recherche globale - Endpoint: GET /api/ouvrages/recherche-globale
+    // Recherche globale - interroge tous les sites en parallèle
     async rechercheGlobale(site: SiteCode, titre: string): Promise<OuvrageGlobal[]> {
       if (isDemo) return await delay(500).then(() => demoStore.rechercheGlobale(titre))
-      return req<OuvrageGlobal[]>(base(site), `/api/ouvrages/recherche-globale?titre=${encodeURIComponent(titre)}`)
+      
+      // Encoder le titre pour les caractères spéciaux
+      const encodedTitre = encodeURIComponent(titre)
+      
+      const sites: SiteCode[] = ["UGB", "UCAD", "UADB"]
+      const allResults = await Promise.all(
+        sites.map(async (s) => {
+          try {
+            const url = `${base(s)}/api/ouvrages/recherche-globale?titre=${encodedTitre}`
+            const res = await fetch(url)
+            if (!res.ok) return []
+            const data = await res.json()
+            console.log(`Résultats de ${s}:`, data)
+            return (data || []).map((item: any) => ({
+              id: item.idOuv || item.id,
+              titre: item.titre || "Sans titre",
+              auteurNom: item.auteurNom || null,
+              auteurPrenom: item.auteurPrenom || null,
+              auteurId: item.auteurId || null,
+              siteSource: item.site || s,
+              disponible: (item.stock || 0) > 0,
+              stock: item.stock || 0,
+              editeur: item.editeur,
+              annee: item.annee,
+              domaine: item.domaine
+            }))
+          } catch (err) {
+            console.error(`Erreur sur ${s}:`, err)
+            return []
+          }
+        })
+      )
+      
+      return allResults.flat()
     },
 
-    // Auteurs - Endpoint: GET /api/auteurs
     async getAuteurs(site: SiteCode): Promise<Auteur[]> {
       if (isDemo) return await delay().then(() => demoStore.getAuteurs(site))
       return req<Auteur[]>(base(site), "/api/auteurs")
@@ -103,19 +131,16 @@ export function createApi(ctx: ApiContext) {
       return req<Auteur>(base(site), "/api/auteurs", { method: "POST", body: JSON.stringify(data) })
     },
 
-    // Prets - Endpoint: GET /api/prets
     async getPrets(site: SiteCode): Promise<Pret[]> {
       if (isDemo) return await delay().then(() => demoStore.getPrets(site))
       return req<Pret[]>(base(site), "/api/prets")
     },
 
-    // Emprunter - Endpoint: POST /api/prets/emprunter
     async emprunter(ouvrageSite: SiteCode, data: EmpruntRequest): Promise<Pret> {
       if (isDemo) return await delay(500).then(() => demoStore.emprunter(ouvrageSite, data).pret)
       return req<Pret>(base(ouvrageSite), "/api/prets/emprunter", { method: "POST", body: JSON.stringify(data) })
     },
 
-    // Retour - Endpoint: POST /api/prets/retourner
     async retour(ouvrageSite: SiteCode, idPret: number): Promise<Pret> {
       if (isDemo) return await delay().then(() => demoStore.retour(ouvrageSite, idPret))
       return req<Pret>(base(ouvrageSite), `/api/prets/retourner`, { 
