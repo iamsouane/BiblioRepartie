@@ -1,0 +1,32 @@
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: ugb-service
+          uri: lb://UGB-SERVICE
+          predicates:
+            - Path=/api/ugb/**
+          filters:
+            - StripPrefix=1
+        - id: ucad-service
+          uri: lb://UCAD-SERVICE
+          predicates:
+            - Path=/api/ucad/**
+          filters:
+            - StripPrefix=1
+        - id: uadb-service
+          uri: lb://UADB-SERVICE
+          predicates:
+            - Path=/api/uadb/**
+          filters:
+            - StripPrefix=1
+
+server:
+  port: 8080
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://discovery-service:8761/eureka/
+  instance:
+    prefer-ip-address: true

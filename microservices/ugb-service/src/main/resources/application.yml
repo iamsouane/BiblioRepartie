@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: ugb-service
+  config:
+    import: optional:configserver:http://config-service:8888
+  cloud:
+    config:
+      enabled: true
+      uri: http://config-service:8888
+      import-check:
+        enabled: false

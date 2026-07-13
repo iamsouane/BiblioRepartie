@@ -1,0 +1,209 @@
+services:
+
+  # SERVICE DISCOVERY (EUREKA)
+  discovery-service:
+    build:
+      context: ./microservices/discovery-service
+    container_name: discovery-service
+    ports:
+      - "8761:8761"
+    networks:
+      - gestionbu-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # CONFIG SERVER
+  config-service:
+    build:
+      context: ./microservices/config-service
+    container_name: config-service
+    ports:
+      - "8888:8888"
+    networks:
+      - gestionbu-network
+    depends_on:
+      discovery-service:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=native
+      - SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCH_LOCATIONS=classpath:/config
+
+  # POSTGRESQL UGB
+  postgres-ugb:
+    image: postgres:16
+    container_name: postgres-ugb
+    environment:
+      POSTGRES_DB: ugbdb
+      POSTGRES_USER: ugbuser
+      POSTGRES_PASSWORD: ugbpassword
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_ugb_data:/var/lib/postgresql/data
+      - ./init-scripts/ugb-init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - gestionbu-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ugbuser -d ugbdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # POSTGRESQL UCAD
+  postgres-ucad:
+    image: postgres:16
+    container_name: postgres-ucad
+    environment:
+      POSTGRES_DB: ucaddb
+      POSTGRES_USER: ucaduser
+      POSTGRES_PASSWORD: ucadpassword
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_ucad_data:/var/lib/postgresql/data
+      - ./init-scripts/ucad-init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - gestionbu-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ucaduser -d ucaddb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # POSTGRESQL UADB
+  postgres-uadb:
+    image: postgres:16
+    container_name: postgres-uadb
+    environment:
+      POSTGRES_DB: uadbbd
+      POSTGRES_USER: uadbuser
+      POSTGRES_PASSWORD: uadbpassword
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_uadb_data:/var/lib/postgresql/data
+      - ./init-scripts/uadb-init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - gestionbu-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uadbuser -d uadbbd"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # UCAD MICROSERVICE
+  ucad-service:
+    build:
+      context: ./microservices/ucad-service
+    container_name: ucad-service
+    ports:
+      - "8081:8080"
+    networks:
+      - gestionbu-network
+    depends_on:
+      discovery-service:
+        condition: service_healthy
+      config-service:
+        condition: service_started
+      postgres-ucad:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=ucad
+      - SPRING_CLOUD_CONFIG_URI=http://config-service:8888
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-ucad:5432/ucaddb
+      - SPRING_DATASOURCE_USERNAME=ucaduser
+      - SPRING_DATASOURCE_PASSWORD=ucadpassword
+
+  # UGB MICROSERVICE
+  ugb-service:
+    build:
+      context: ./microservices/ugb-service
+    container_name: ugb-service
+    ports:
+      - "8082:8080"
+    networks:
+      - gestionbu-network
+    depends_on:
+      discovery-service:
+        condition: service_healthy
+      config-service:
+        condition: service_started
+      postgres-ugb:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=ugb
+      - SPRING_CLOUD_CONFIG_URI=http://config-service:8888
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-ugb:5432/ugbdb
+      - SPRING_DATASOURCE_USERNAME=ugbuser
+      - SPRING_DATASOURCE_PASSWORD=ugbpassword
+
+  # UADB MICROSERVICE
+  uadb-service:
+    build:
+      context: ./microservices/uadb-service
+    container_name: uadb-service
+    ports:
+      - "8083:8080"
+    networks:
+      - gestionbu-network
+    depends_on:
+      discovery-service:
+        condition: service_healthy
+      config-service:
+        condition: service_started
+      postgres-uadb:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=uadb
+      - SPRING_CLOUD_CONFIG_URI=http://config-service:8888
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-service:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-uadb:5432/uadbbd
+      - SPRING_DATASOURCE_USERNAME=uadbuser
+      - SPRING_DATASOURCE_PASSWORD=uadbpassword
+
+  # API GATEWAY
+  gateway-service:
+    build:
+      context: ./microservices/gateway-service
+    container_name: gateway-service
+    ports:
+      - "8080:8080"
+    networks:
+      - gestionbu-network
+    depends_on:
+      discovery-service:
+        condition: service_healthy
+      config-service:
+        condition: service_started
+    environment:
+      - SPRING_CLOUD_CONFIG_URI=http://config-service:8888
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-service:8761/eureka/
+
+  # FRONTEND REACT
+  frontend:
+    build:
+      context: ./frontend/gestion-bu-frontend
+    container_name: gestion-bu-frontend
+    ports:
+      - "3000:80"
+    networks:
+      - gestionbu-network
+    depends_on:
+      gateway-service:
+        condition: service_started
+
+# VOLUMES
+volumes:
+  postgres_ugb_data:
+  postgres_ucad_data:
+  postgres_uadb_data:
+
+# NETWORK
+networks:
+  gestionbu-network:
+    driver: bridge

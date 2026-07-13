@@ -1,0 +1,48 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-uadb:5432/uadbbd
+    username: uadbuser
+    password: uadbpassword
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-timeout: 30000
+      maximum-pool-size: 10
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  cloud:
+    config:
+      retry:
+        enabled: true
+        max-attempts: 20
+        max-interval: 10000
+        initial-interval: 2000
+        multiplier: 1.5
+
+server:
+  port: 8080
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://discovery-service:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
+
+bibliotheque:
+  nom: UADB
+  site: UADB
+
+services:
+  ugb: http://ugb-service:8080
+  ucad: http://ucad-service:8080
+  uadb: http://uadb-service:8080

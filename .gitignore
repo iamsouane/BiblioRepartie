@@ -1,0 +1,75 @@
+# Maven
+target/
+*.jar
+*.war
+*.ear
+*.class
+*.log
+
+# Docker
+*.pid
+*.lock
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+*.swp
+*.swo
+*~
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+.npm
+.yarn
+.pnpm
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Database
+*.db
+*.sqlite
+
+# Coverage
+coverage/
+
+# Build
+build/
+dist/
+
+# Frontend specific
+frontend/gestion-bu-frontend/.next/
+frontend/gestion-bu-frontend/node_modules/
+frontend/gestion-bu-frontend/out/
+frontend/gestion-bu-frontend/dist/
+
+# Backend specific
+microservices/*/target/
+microservices/*/.classpath
+microservices/*/.project
+microservices/*/.settings/
+
+# Docker volumes
+postgres_data/
