@@ -3,6 +3,7 @@ package com.gestionbu.ugb.controller;
 import com.gestionbu.ugb.model.EmployeUGB;
 import com.gestionbu.ugb.repository.EmployeUGBRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,9 +21,10 @@ public class EmployeController {
     }
     
     @GetMapping("/{id}")
-    public EmployeUGB getEmployeById(@PathVariable Long id) {
+    public ResponseEntity<EmployeUGB> getEmployeById(@PathVariable Long id) {
         return employeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Employé non trouvé"));
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
     
     @PostMapping
@@ -30,8 +32,24 @@ public class EmployeController {
         return employeRepository.save(employe);
     }
     
+    @PutMapping("/{id}")
+    public ResponseEntity<EmployeUGB> updateEmploye(@PathVariable Long id, @RequestBody EmployeUGB employe) {
+        return employeRepository.findById(id)
+                .map(existing -> {
+                    existing.setNom(employe.getNom());
+                    existing.setAdresse(employe.getAdresse());
+                    existing.setStatut(employe.getStatut());
+                    return ResponseEntity.ok(employeRepository.save(existing));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+    
     @DeleteMapping("/{id}")
-    public void deleteEmploye(@PathVariable Long id) {
-        employeRepository.deleteById(id);
+    public ResponseEntity<Void> deleteEmploye(@PathVariable Long id) {
+        if (employeRepository.existsById(id)) {
+            employeRepository.deleteById(id);
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.notFound().build();
     }
 }

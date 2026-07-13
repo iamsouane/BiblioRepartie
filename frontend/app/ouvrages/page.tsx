@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import {
   BookOpen,
@@ -53,7 +53,7 @@ function Ouvrages() {
   const [newTitre, setNewTitre] = useState("")
   const [newAuteur, setNewAuteur] = useState("")
   const [newDomaine, setNewDomaine] = useState("")
-
+  
   const ouvrages = useResource("ouvrages", (a) => a.getOuvrages(site))
   const auteurs = useResource("auteurs", (a) => a.getAuteurs(site))
   const rechercheGlobale = useResource(
@@ -61,17 +61,27 @@ function Ouvrages() {
     (a) => searchTerm.length > 0 ? a.rechercheGlobale(site, searchTerm) : Promise.resolve([])
   )
 
-  const getAuteurNom = (idAuteur: string | number) => {
-    if (!idAuteur) return "—"
-    const auteur = auteurs.data?.find((a) => a.id === idAuteur || a.idAut === idAuteur)
-    if (auteur) {
-      return auteur.nomAuteur || auteur.nom || `${auteur.prenom} ${auteur.nom}` || "—"
+  // Fonction pour obtenir le nom de l'auteur
+  const getAuteurNom = (auteurId: any) => {
+    if (!auteurId) return "—"
+    
+    const id = Number(auteurId)
+    
+    // Chercher dans les données des auteurs
+    if (auteurs.data && auteurs.data.length > 0) {
+      for (const a of auteurs.data) {
+        // L'API retourne idAut, pas id
+        const aid = a.idAut || a.id
+        if (Number(aid) === id) {
+          return a.nomAuteur || a.nom || "Inconnu"
+        }
+      }
     }
+    
     return "—"
   }
 
   const getSiteDisplay = (item: any) => {
-    // Pour les résultats de recherche, utiliser siteSource ou site
     return item.siteSource || item.site || "—"
   }
 
@@ -80,7 +90,6 @@ function Ouvrages() {
   }
 
   const getDisponible = (item: any) => {
-    // Vérifier si disponible ou stock > 0
     if (item.disponible !== undefined) return item.disponible
     if (item.stock !== undefined) return item.stock > 0
     return false
@@ -264,7 +273,7 @@ function Ouvrages() {
                       </TableCell>
                       <TableCell className="font-medium">{o.titre || "Sans titre"}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {getAuteurNom(o.idAuteur)}
+                        {getAuteurNom(o.auteurId)}
                       </TableCell>
                       <TableCell>
                         <SiteBadge site={o.site} />
