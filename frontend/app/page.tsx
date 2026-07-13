@@ -35,7 +35,8 @@ function Dashboard() {
   const info = useResource("site-info", (a) => a.getSiteInfo(site))
 
   const dispo = ouvrages.data?.filter((o) => o.disponible).length ?? 0
-  const enCours = prets.data?.filter((p) => p.statut === "EN_COURS").length ?? 0
+  // Un prêt est en cours si dateRetour est null OU si le statut est "EN_COURS"
+  const enCours = prets.data?.filter((p) => p.dateRetour === null || p.statut === "EN_COURS").length ?? 0
 
   const stats = [
     {
