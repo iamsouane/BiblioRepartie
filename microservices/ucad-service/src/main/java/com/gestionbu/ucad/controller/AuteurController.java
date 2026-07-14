@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,17 +44,18 @@ public class AuteurController {
     public Auteur createAuteur(@RequestBody Auteur auteur) {
         Auteur saved = auteurRepository.save(auteur);
         
-        // Créer un DTO sans l'ID pour la réplication
         Map<String, String> auteurDTO = new HashMap<>();
         auteurDTO.put("nomAuteur", saved.getNomAuteur());
         
         try {
             restTemplate.postForObject(ugbServiceUrl + "/api/auteurs", auteurDTO, Object.class);
+            System.out.println("Réplication CREATE réussie sur UGB");
         } catch (Exception e) {
             System.err.println("Erreur réplication sur UGB: " + e.getMessage());
         }
         try {
             restTemplate.postForObject(uadbServiceUrl + "/api/auteurs", auteurDTO, Object.class);
+            System.out.println("Réplication CREATE réussie sur UADB");
         } catch (Exception e) {
             System.err.println("Erreur réplication sur UADB: " + e.getMessage());
         }
@@ -63,20 +66,26 @@ public class AuteurController {
     public Auteur updateAuteur(@PathVariable Long id, @RequestBody Auteur auteur) {
         Auteur existing = auteurRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Auteur non trouvé"));
+        String ancienNom = existing.getNomAuteur();
+        
         existing.setNomAuteur(auteur.getNomAuteur());
         Auteur updated = auteurRepository.save(existing);
         
-        // Créer un DTO pour la mise à jour
-        Map<String, String> auteurDTO = new HashMap<>();
-        auteurDTO.put("nomAuteur", updated.getNomAuteur());
+        Map<String, String> updateDTO = new HashMap<>();
+        updateDTO.put("ancienNom", ancienNom);
+        updateDTO.put("nouveauNom", auteur.getNomAuteur());
+        
+        System.out.println("Tentative de mise à jour: " + ancienNom + " -> " + auteur.getNomAuteur());
         
         try {
-            restTemplate.put(ugbServiceUrl + "/api/auteurs/" + id, auteurDTO);
+            restTemplate.put(ugbServiceUrl + "/api/auteurs/update-by-name", updateDTO);
+            System.out.println("Réplication UPDATE réussie sur UGB");
         } catch (Exception e) {
             System.err.println("Erreur mise à jour sur UGB: " + e.getMessage());
         }
         try {
-            restTemplate.put(uadbServiceUrl + "/api/auteurs/" + id, auteurDTO);
+            restTemplate.put(uadbServiceUrl + "/api/auteurs/update-by-name", updateDTO);
+            System.out.println("Réplication UPDATE réussie sur UADB");
         } catch (Exception e) {
             System.err.println("Erreur mise à jour sur UADB: " + e.getMessage());
         }
@@ -85,14 +94,24 @@ public class AuteurController {
     
     @DeleteMapping("/{id}")
     public void deleteAuteur(@PathVariable Long id) {
+        Auteur auteur = auteurRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Auteur non trouvé"));
+        String nomAuteur = auteur.getNomAuteur();
+        
         auteurRepository.deleteById(id);
+        
+        // Encoder le nom pour l'URL
+        String encodedNom = URLEncoder.encode(nomAuteur, StandardCharsets.UTF_8);
+        
         try {
-            restTemplate.delete(ugbServiceUrl + "/api/auteurs/" + id);
+            restTemplate.delete(ugbServiceUrl + "/api/auteurs/delete-by-name?nom=" + encodedNom);
+            System.out.println("Réplication DELETE réussie sur UGB");
         } catch (Exception e) {
             System.err.println("Erreur suppression sur UGB: " + e.getMessage());
         }
         try {
-            restTemplate.delete(uadbServiceUrl + "/api/auteurs/" + id);
+            restTemplate.delete(uadbServiceUrl + "/api/auteurs/delete-by-name?nom=" + encodedNom);
+            System.out.println("Réplication DELETE réussie sur UADB");
         } catch (Exception e) {
             System.err.println("Erreur suppression sur UADB: " + e.getMessage());
         }
