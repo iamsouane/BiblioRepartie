@@ -47,26 +47,63 @@ function Emprunts() {
   const [tx, setTx] = useState<TxState>("idle")
   const [txMsg, setTxMsg] = useState<string>("")
 
-  const disponibles = ouvrages.data?.filter((o) => o.disponible) ?? []
+  // Normaliser les ouvrages
+  const ouvragesNormalises = ouvrages.data?.map((o: any) => ({
+    ...o,
+    id: o.idOuv || o.id,
+    disponible: o.stock > 0 || o.disponible === true,
+    titre: o.titre || "Sans titre",
+    affichage: `${o.titre || "Sans titre"} (Stock: ${o.stock || 0})`
+  })) ?? []
+
+  const disponibles = ouvragesNormalises.filter((o) => o.disponible)
+
+  // Normaliser les étudiants
+  const etudiantsNormalises = etudiants.data?.map((e: any) => ({
+    ...e,
+    id: e.idEtud || e.id,
+    nom: e.nom || "Inconnu",
+    prenom: e.prenom || "",
+    affichage: `${e.nom || "Inconnu"} ${e.prenom || ""} (ID: ${e.idEtud || e.id})`
+  })) ?? []
+
   const distant = univEtudiant !== site
 
   async function submit() {
-    const etu = etudiants.data?.find((e) => String(e.id) === idEtudiant)
+    const etu = etudiantsNormalises.find((e) => String(e.id) === idEtudiant)
     const ouv = disponibles.find((o) => String(o.id) === idOuvrage)
     if (!ouv || !etu) {
       toast.error("Sélectionnez un ouvrage disponible et un étudiant")
       return
     }
+    
     setTx("running")
     setTxMsg("")
+    
     try {
-      await api.emprunter(site, {
-        idOuvrage: ouv.id,
-        idEtudiant: etu.id,
-        universiteEtudiant: univEtudiant,
-        nomEtudiant: etu.nom,
-        prenomEtudiant: etu.prenom,
+      // Utiliser l'API directement avec fetch pour avoir plus de contrôle
+      const baseUrl = `http://localhost:8081` // site actuel (UCAD)
+      const response = await fetch(`${baseUrl}/api/prets/emprunter`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          etudiantId: Number(etu.id),
+          ouvrageId: Number(ouv.id)
+        })
       })
+      
+      if (!response.ok) {
+        const error = await response.text()
+        throw new Error(error || "Erreur lors de l'emprunt")
+      }
+      
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.message || "Erreur lors de l'emprunt")
+      }
+      
       setTx("done")
       toast.success(distant ? "Transaction distribuée validée" : "Emprunt enregistré")
       setIdOuvrage("")
@@ -75,8 +112,9 @@ function Emprunts() {
       etudiants.mutate()
     } catch (e) {
       setTx("error")
-      setTxMsg((e as Error).message)
-      toast.error((e as Error).message)
+      const errorMsg = (e as Error).message
+      setTxMsg(errorMsg)
+      toast.error(errorMsg)
     }
   }
 
@@ -107,7 +145,7 @@ function Emprunts() {
                 <SelectContent>
                   {disponibles.map((o) => (
                     <SelectItem key={o.id} value={String(o.id)}>
-                      #{o.id} — {o.titre}
+                      {o.affichage}
                     </SelectItem>
                   ))}
                   {disponibles.length === 0 && (
@@ -146,11 +184,14 @@ function Emprunts() {
                   <SelectValue placeholder={etudiants.isLoading ? "Chargement…" : "Choisir un étudiant"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {etudiants.data?.map((e: Etudiant) => (
+                  {etudiantsNormalises.map((e) => (
                     <SelectItem key={e.id} value={String(e.id)}>
-                      #{e.id} — {e.prenom} {e.nom}
+                      {e.affichage}
                     </SelectItem>
                   ))}
+                  {etudiantsNormalises.length === 0 && (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">Aucun étudiant trouvé</div>
+                  )}
                 </SelectContent>
               </Select>
             </div>

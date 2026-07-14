@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import {
   BookOpen,
@@ -9,6 +9,7 @@ import {
   ArrowRight,
   CheckCircle2,
   XCircle,
+  Package,
 } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { PageHeader, SiteBadge, DataState } from "@/components/shared"
@@ -67,10 +68,8 @@ function Ouvrages() {
     
     const id = Number(auteurId)
     
-    // Chercher dans les données des auteurs
     if (auteurs.data && auteurs.data.length > 0) {
       for (const a of auteurs.data) {
-        // L'API retourne idAut, pas id
         const aid = a.idAut || a.id
         if (Number(aid) === id) {
           return a.nomAuteur || a.nom || "Inconnu"
@@ -93,6 +92,11 @@ function Ouvrages() {
     if (item.disponible !== undefined) return item.disponible
     if (item.stock !== undefined) return item.stock > 0
     return false
+  }
+
+  const getStock = (item: any) => {
+    if (item.stock !== undefined) return item.stock
+    return 0
   }
 
   const getKey = (item: any, index: number) => {
@@ -207,6 +211,7 @@ function Ouvrages() {
                       <TableHead>Titre</TableHead>
                       <TableHead>Auteur</TableHead>
                       <TableHead>Détenu par</TableHead>
+                      <TableHead className="text-center">Stock</TableHead>
                       <TableHead className="text-center">Statut</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -222,6 +227,12 @@ function Ouvrages() {
                         </TableCell>
                         <TableCell>
                           <SiteBadge site={getSiteDisplay(o)} />
+                        </TableCell>
+                        <TableCell className="text-center font-mono">
+                          <Badge variant={getStock(o) > 0 ? "default" : "destructive"} className="gap-1">
+                            <Package className="size-3" />
+                            {getStock(o)}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-center">
                           {getDisponible(o) ? (
@@ -261,6 +272,7 @@ function Ouvrages() {
                   <TableHead>Titre</TableHead>
                   <TableHead>Auteur</TableHead>
                   <TableHead>Site</TableHead>
+                  <TableHead className="text-center">Stock</TableHead>
                   <TableHead className="text-center">Statut</TableHead>
                 </TableRow>
               </TableHeader>
@@ -277,6 +289,12 @@ function Ouvrages() {
                       </TableCell>
                       <TableCell>
                         <SiteBadge site={o.site} />
+                      </TableCell>
+                      <TableCell className="text-center font-mono">
+                        <Badge variant={getStock(o) > 0 ? "default" : "destructive"} className="gap-1">
+                          <Package className="size-3" />
+                          {getStock(o)}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-center">
                         {o.disponible ? (
@@ -295,7 +313,7 @@ function Ouvrages() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                       Aucun ouvrage dans ce fragment.
                     </TableCell>
                   </TableRow>
