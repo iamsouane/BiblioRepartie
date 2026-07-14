@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Undo2 } from "lucide-react"
+import { Undo2, Eye } from "lucide-react"
 import { toast } from "sonner"
 import { AppShell } from "@/components/app-shell"
 import { PageHeader, SiteBadge, DataState } from "@/components/shared"
@@ -10,6 +10,7 @@ import { useResource } from "@/lib/use-resource"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import Link from "next/link"
 import {
   Table,
   TableBody,
@@ -159,7 +160,7 @@ function Prets() {
                 <TableHead>Emprunt</TableHead>
                 <TableHead>Retour</TableHead>
                 <TableHead>Statut</TableHead>
-                <TableHead className="text-right">Action</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -197,17 +198,24 @@ function Prets() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {enCours && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => retour(p.id)}
-                          disabled={busy === p.id}
-                        >
-                          <Undo2 className="size-3.5" />
-                          {busy === p.id ? "…" : "Retour"}
-                        </Button>
-                      )}
+                      <div className="flex justify-end gap-1">
+                        <Link href={`/prets/${p.id}`}>
+                          <Button variant="ghost" size="sm" title="Voir les détails">
+                            <Eye className="size-4" />
+                          </Button>
+                        </Link>
+                        {enCours && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => retour(p.id)}
+                            disabled={busy === p.id}
+                          >
+                            <Undo2 className="size-3.5" />
+                            {busy === p.id ? "…" : "Retour"}
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 )
