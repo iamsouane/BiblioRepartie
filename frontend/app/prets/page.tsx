@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { AppShell } from "@/components/app-shell"
@@ -19,6 +19,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
+const SITE_URLS: Record<string, string> = {
+  UGB: "http://localhost:8082",
+  UCAD: "http://localhost:8081",
+  UADB: "http://localhost:8083",
+}
+
 export default function PretsPage() {
   return (
     <AppShell>
@@ -31,11 +37,92 @@ function Prets() {
   const { site, api } = useSite()
   const prets = useResource("prets", (a) => a.getPrets(site))
   const [busy, setBusy] = useState<number | null>(null)
+  const [pretsEnrichis, setPretsEnrichis] = useState<any[]>([])
+  const [loadingNames, setLoadingNames] = useState(false)
+
+  const getEtudiantName = async (etudiantId: number) => {
+    let siteCode = "UCAD"
+    if (etudiantId >= 1000 && etudiantId < 2000) siteCode = "UGB"
+    else if (etudiantId >= 2000 && etudiantId < 3000) siteCode = "UCAD"
+    else if (etudiantId >= 3000 && etudiantId < 4000) siteCode = "UADB"
+    
+    const baseUrl = SITE_URLS[siteCode]
+    try {
+      const res = await fetch(`${baseUrl}/api/etudiants/${etudiantId}`)
+      if (res.ok) {
+        const data = await res.json()
+        return data.nom || `Étudiant #${etudiantId}`
+      }
+      return `Étudiant #${etudiantId}`
+    } catch {
+      return `Étudiant #${etudiantId}`
+    }
+  }
+
+  const getOuvrageTitle = async (ouvrageId: number) => {
+    const baseUrl = SITE_URLS[site]
+    try {
+      const res = await fetch(`${baseUrl}/api/ouvrages/${ouvrageId}`)
+      if (res.ok) {
+        const data = await res.json()
+        return data.titre || `Ouvrage #${ouvrageId}`
+      }
+      return `Ouvrage #${ouvrageId}`
+    } catch {
+      return `Ouvrage #${ouvrageId}`
+    }
+  }
+
+  useEffect(() => {
+    const enrichPrets = async () => {
+      if (!prets.data || prets.data.length === 0) {
+        setPretsEnrichis([])
+        return
+      }
+
+      setLoadingNames(true)
+      const enriched = await Promise.all(
+        prets.data.map(async (pret: any) => {
+          const etudiantNom = await getEtudiantName(pret.etudiantId)
+          const ouvrageTitre = await getOuvrageTitle(pret.ouvrageId)
+          
+          let universite = "—"
+          if (pret.etudiantId >= 1000 && pret.etudiantId < 2000) universite = "UGB"
+          else if (pret.etudiantId >= 2000 && pret.etudiantId < 3000) universite = "UCAD"
+          else if (pret.etudiantId >= 3000 && pret.etudiantId < 4000) universite = "UADB"
+
+          return {
+            ...pret,
+            id: pret.idPret || pret.id,
+            titreOuvrage: ouvrageTitre,
+            nomEtudiant: etudiantNom,
+            universiteEtudiant: universite,
+            statut: pret.dateRetour === null ? "EN_COURS" : "RETOURNE",
+            dateEmprunt: pret.dateEmprunt || "—",
+            dateRetour: pret.dateRetour || "—"
+          }
+        })
+      )
+      setPretsEnrichis(enriched)
+      setLoadingNames(false)
+    }
+
+    enrichPrets()
+  }, [prets.data, site])
 
   async function retour(id: number) {
     setBusy(id)
     try {
-      await api.retour(site, id)
+      const baseUrl = SITE_URLS[site] || "http://localhost:8081"
+      const res = await fetch(`${baseUrl}/api/prets/retourner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pretId: id })
+      })
+      if (!res.ok) {
+        const error = await res.text()
+        throw new Error(error || "Erreur lors du retour")
+      }
       toast.success("Ouvrage retourné, compteur étudiant ajusté")
       prets.mutate()
     } catch (e) {
@@ -44,6 +131,8 @@ function Prets() {
       setBusy(null)
     }
   }
+
+  const isLoading = prets.isLoading || loadingNames
 
   return (
     <>
@@ -55,9 +144,9 @@ function Prets() {
 
       <Card className="overflow-hidden p-0">
         <DataState
-          isLoading={prets.isLoading}
+          isLoading={isLoading}
           error={prets.error}
-          isEmpty={prets.data?.length === 0}
+          isEmpty={pretsEnrichis.length === 0}
           emptyLabel="Aucun prêt traité par ce site."
         >
           <Table>
@@ -74,15 +163,15 @@ function Prets() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {prets.data?.map((p) => {
-                const distant = p.universiteEtudiant !== site
+              {pretsEnrichis.map((p) => {
+                const enCours = p.statut === "EN_COURS"
+                const distant = p.universiteEtudiant !== site && p.universiteEtudiant !== "—"
+
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="font-mono text-muted-foreground">{p.id}</TableCell>
                     <TableCell className="font-medium">{p.titreOuvrage}</TableCell>
-                    <TableCell>
-                      {p.prenomEtudiant} {p.nomEtudiant}
-                    </TableCell>
+                    <TableCell>{p.nomEtudiant}</TableCell>
                     <TableCell>
                       <span className="flex items-center gap-1.5">
                         <SiteBadge site={p.universiteEtudiant} />
@@ -94,21 +183,21 @@ function Prets() {
                       </span>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{p.dateEmprunt}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.dateRetour ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.dateRetour}</TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
                         className={
-                          p.statut === "EN_COURS"
+                          enCours
                             ? "border-accent/40 bg-accent/15 text-accent-foreground"
                             : "border-primary/30 bg-primary/10 text-primary"
                         }
                       >
-                        {p.statut === "EN_COURS" ? "En cours" : "Retourné"}
+                        {enCours ? "En cours" : "Retourné"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {p.statut === "EN_COURS" && (
+                      {enCours && (
                         <Button
                           variant="outline"
                           size="sm"

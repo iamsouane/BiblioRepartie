@@ -41,66 +41,6 @@ public class PretController {
     @Value("${services.uadb:http://uadb-service:8080}")
     private String uadbServiceUrl;
     
-    private String getSiteEtudiant(Long etudiantId) {
-        if (etudiantRepository.existsById(etudiantId)) {
-            return "UGB";
-        }
-        try {
-            String url = ucadServiceUrl + "/api/etudiants/" + etudiantId + "/exists";
-            Boolean exists = restTemplate.getForObject(url, Boolean.class);
-            if (Boolean.TRUE.equals(exists)) {
-                return "UCAD";
-            }
-        } catch (Exception e) {}
-        try {
-            String url = uadbServiceUrl + "/api/etudiants/" + etudiantId + "/exists";
-            Boolean exists = restTemplate.getForObject(url, Boolean.class);
-            if (Boolean.TRUE.equals(exists)) {
-                return "UADB";
-            }
-        } catch (Exception e) {}
-        throw new RuntimeException("Étudiant non trouvé sur aucun site");
-    }
-    
-    private Integer getNbreEmprunts(Long etudiantId) {
-        String site = getSiteEtudiant(etudiantId);
-        if ("UGB".equals(site)) {
-            EtudiantUGB etudiant = etudiantRepository.findById(etudiantId)
-                    .orElseThrow(() -> new RuntimeException("Étudiant non trouvé"));
-            return etudiant.getNbreEmprunts();
-        } else if ("UCAD".equals(site)) {
-            String url = ucadServiceUrl + "/api/etudiants/" + etudiantId + "/nbremprunts";
-            return restTemplate.getForObject(url, Integer.class);
-        } else {
-            String url = uadbServiceUrl + "/api/etudiants/" + etudiantId + "/nbremprunts";
-            return restTemplate.getForObject(url, Integer.class);
-        }
-    }
-    
-    private void incrementerNbreEmpruntsDistribue(Long etudiantId, String site) {
-        if ("UGB".equals(site)) {
-            etudiantRepository.incrementerNbreEmprunts(etudiantId);
-        } else if ("UCAD".equals(site)) {
-            String url = ucadServiceUrl + "/api/etudiants/" + etudiantId + "/incrementer";
-            restTemplate.put(url, null);
-        } else if ("UADB".equals(site)) {
-            String url = uadbServiceUrl + "/api/etudiants/" + etudiantId + "/incrementer";
-            restTemplate.put(url, null);
-        }
-    }
-    
-    private void decrementerNbreEmpruntsDistribue(Long etudiantId, String site) {
-        if ("UGB".equals(site)) {
-            etudiantRepository.decrementerNbreEmprunts(etudiantId);
-        } else if ("UCAD".equals(site)) {
-            String url = ucadServiceUrl + "/api/etudiants/" + etudiantId + "/decrementer";
-            restTemplate.put(url, null);
-        } else if ("UADB".equals(site)) {
-            String url = uadbServiceUrl + "/api/etudiants/" + etudiantId + "/decrementer";
-            restTemplate.put(url, null);
-        }
-    }
-    
     @GetMapping
     public List<PretUGB> getAllPrets() {
         return pretRepository.findAll();
@@ -115,87 +55,96 @@ public class PretController {
     public ResponseEntity<Map<String, Object>> emprunter(@RequestBody EmpruntRequest request) {
         Map<String, Object> response = new HashMap<>();
         
-        OuvrageUGB ouvrage = ouvrageRepository.findById(request.getOuvrageId())
-                .orElseThrow(() -> new RuntimeException("Ouvrage non trouvé sur UGB"));
-        
-        if (ouvrage.getStock() <= 0) {
-            response.put("success", false);
-            response.put("message", "Ouvrage indisponible sur UGB");
-            return ResponseEntity.badRequest().body(response);
-        }
-        
-        String siteEtudiant;
         try {
-            siteEtudiant = getSiteEtudiant(request.getEtudiantId());
+            OuvrageUGB ouvrage = ouvrageRepository.findById(request.getOuvrageId())
+                    .orElseThrow(() -> new RuntimeException("Ouvrage non trouvé sur UGB"));
+            
+            if (ouvrage.getStock() <= 0) {
+                response.put("success", false);
+                response.put("message", "Ouvrage indisponible sur UGB");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            String siteEtudiant = "UGB";
+            Long etudiantId = request.getEtudiantId();
+            if (etudiantId >= 1000 && etudiantId < 2000) siteEtudiant = "UGB";
+            else if (etudiantId >= 2000 && etudiantId < 3000) siteEtudiant = "UCAD";
+            else if (etudiantId >= 3000 && etudiantId < 4000) siteEtudiant = "UADB";
+            
+            PretUGB pret = new PretUGB();
+            pret.setOuvrageId(request.getOuvrageId());
+            pret.setEtudiantId(request.getEtudiantId());
+            pret.setDateEmprunt(LocalDate.now());
+            pret = pretRepository.save(pret);
+            
+            ouvrageRepository.decrementerStock(request.getOuvrageId());
+            
+            if ("UGB".equals(siteEtudiant)) {
+                etudiantRepository.incrementerNbreEmprunts(request.getEtudiantId());
+            } else if ("UCAD".equals(siteEtudiant)) {
+                String url = ucadServiceUrl + "/api/etudiants/" + request.getEtudiantId() + "/incrementer";
+                restTemplate.put(url, null);
+            } else if ("UADB".equals(siteEtudiant)) {
+                String url = uadbServiceUrl + "/api/etudiants/" + request.getEtudiantId() + "/incrementer";
+                restTemplate.put(url, null);
+            }
+            
+            response.put("success", true);
+            response.put("message", "Emprunt effectué avec succès");
+            response.put("pret", pret);
+            response.put("siteOuvrage", "UGB");
+            response.put("siteEtudiant", siteEtudiant);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             response.put("success", false);
-            response.put("message", "Étudiant non trouvé sur aucun site");
-            return ResponseEntity.badRequest().body(response);
-        }
-        
-        Integer nbreEmprunts = getNbreEmprunts(request.getEtudiantId());
-        if (nbreEmprunts >= 5) {
-            response.put("success", false);
-            response.put("message", "Limite d'emprunts atteinte (5 maximum)");
-            response.put("nbreEmprunts", nbreEmprunts);
-            return ResponseEntity.badRequest().body(response);
-        }
-        
-        PretUGB pret = new PretUGB();
-        pret.setOuvrageId(request.getOuvrageId());
-        pret.setEtudiantId(request.getEtudiantId());
-        pret.setDateEmprunt(LocalDate.now());
-        pret = pretRepository.save(pret);
-        
-        ouvrageRepository.decrementerStock(request.getOuvrageId());
-        
-        try {
-            incrementerNbreEmpruntsDistribue(request.getEtudiantId(), siteEtudiant);
-        } catch (Exception e) {
-            pretRepository.delete(pret);
-            ouvrageRepository.incrementerStock(request.getOuvrageId());
-            response.put("success", false);
-            response.put("message", "Erreur lors de la transaction distribuée: " + e.getMessage());
+            response.put("message", e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
-        
-        response.put("success", true);
-        response.put("message", "Emprunt effectué avec succès");
-        response.put("pret", pret);
-        response.put("siteOuvrage", "UGB");
-        response.put("siteEtudiant", siteEtudiant);
-        response.put("nbreEmpruntsTotal", nbreEmprunts + 1);
-        return ResponseEntity.ok(response);
     }
     
     @PostMapping("/retourner")
     public ResponseEntity<Map<String, Object>> retourner(@RequestBody RetourRequest request) {
         Map<String, Object> response = new HashMap<>();
         
-        PretUGB pret = pretRepository.findById(request.getPretId())
-                .orElseThrow(() -> new RuntimeException("Prêt non trouvé"));
-        
-        if (pret.getDateRetour() != null) {
-            response.put("success", false);
-            response.put("message", "Ce prêt a déjà été retourné");
-            return ResponseEntity.badRequest().body(response);
-        }
-        
-        String siteEtudiant = getSiteEtudiant(pret.getEtudiantId());
-        pret.setDateRetour(LocalDate.now());
-        pretRepository.save(pret);
-        ouvrageRepository.incrementerStock(pret.getOuvrageId());
-        
         try {
-            decrementerNbreEmpruntsDistribue(pret.getEtudiantId(), siteEtudiant);
+            PretUGB pret = pretRepository.findById(request.getPretId())
+                    .orElseThrow(() -> new RuntimeException("Prêt non trouvé"));
+            
+            if (pret.getDateRetour() != null) {
+                response.put("success", false);
+                response.put("message", "Ce prêt a déjà été retourné");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            pret.setDateRetour(LocalDate.now());
+            pretRepository.save(pret);
+            
+            ouvrageRepository.incrementerStock(pret.getOuvrageId());
+            
+            Long etudiantId = pret.getEtudiantId();
+            String siteEtudiant = "UGB";
+            if (etudiantId >= 1000 && etudiantId < 2000) siteEtudiant = "UGB";
+            else if (etudiantId >= 2000 && etudiantId < 3000) siteEtudiant = "UCAD";
+            else if (etudiantId >= 3000 && etudiantId < 4000) siteEtudiant = "UADB";
+            
+            if ("UGB".equals(siteEtudiant)) {
+                etudiantRepository.decrementerNbreEmprunts(etudiantId);
+            } else if ("UCAD".equals(siteEtudiant)) {
+                String url = ucadServiceUrl + "/api/etudiants/" + etudiantId + "/decrementer";
+                restTemplate.put(url, null);
+            } else if ("UADB".equals(siteEtudiant)) {
+                String url = uadbServiceUrl + "/api/etudiants/" + etudiantId + "/decrementer";
+                restTemplate.put(url, null);
+            }
+            
+            response.put("success", true);
+            response.put("message", "Retour effectué avec succès");
+            response.put("pret", pret);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            response.put("warning", "Retour effectué mais erreur lors de la mise à jour du compteur: " + e.getMessage());
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
         }
-        
-        response.put("success", true);
-        response.put("message", "Retour effectué avec succès");
-        response.put("pret", pret);
-        response.put("siteEtudiant", siteEtudiant);
-        return ResponseEntity.ok(response);
     }
 }
