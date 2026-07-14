@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   XCircle,
   Package,
+  Pencil,
+  Trash2,
 } from "lucide-react"
 import { AppShell } from "@/components/app-shell"
 import { PageHeader, SiteBadge, DataState } from "@/components/shared"
@@ -36,6 +38,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 
@@ -51,9 +70,19 @@ function Ouvrages() {
   const { site } = useSite()
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [selectedOuvrage, setSelectedOuvrage] = useState<any>(null)
   const [newTitre, setNewTitre] = useState("")
-  const [newAuteur, setNewAuteur] = useState("")
+  const [newAuteurId, setNewAuteurId] = useState<string>("")
   const [newDomaine, setNewDomaine] = useState("")
+  const [newStock, setNewStock] = useState("1")
+  const [editTitre, setEditTitre] = useState("")
+  const [editAuteurId, setEditAuteurId] = useState<string>("")
+  const [editDomaine, setEditDomaine] = useState("")
+  const [editStock, setEditStock] = useState("1")
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   
   const ouvrages = useResource("ouvrages", (a) => a.getOuvrages(site))
   const auteurs = useResource("auteurs", (a) => a.getAuteurs(site))
@@ -62,12 +91,9 @@ function Ouvrages() {
     (a) => searchTerm.length > 0 ? a.rechercheGlobale(site, searchTerm) : Promise.resolve([])
   )
 
-  // Fonction pour obtenir le nom de l'auteur
   const getAuteurNom = (auteurId: any) => {
     if (!auteurId) return "—"
-    
     const id = Number(auteurId)
-    
     if (auteurs.data && auteurs.data.length > 0) {
       for (const a of auteurs.data) {
         const aid = a.idAut || a.id
@@ -76,7 +102,6 @@ function Ouvrages() {
         }
       }
     }
-    
     return "—"
   }
 
@@ -103,12 +128,128 @@ function Ouvrages() {
     return item?.id || item?.idOuv || `item-${index}`
   }
 
-  const handleAjouterOuvrage = async () => {
-    toast.success("Ouvrage ajouté avec succès")
-    setIsDialogOpen(false)
+  const resetForm = () => {
     setNewTitre("")
-    setNewAuteur("")
+    setNewAuteurId("")
     setNewDomaine("")
+    setNewStock("1")
+  }
+
+  const resetEditForm = () => {
+    setEditTitre("")
+    setEditAuteurId("")
+    setEditDomaine("")
+    setEditStock("1")
+    setSelectedOuvrage(null)
+  }
+
+  const handleAjouterOuvrage = async () => {
+    if (!newTitre.trim() || !newAuteurId) {
+      toast.error("Veuillez remplir tous les champs obligatoires")
+      return
+    }
+    
+    setSaving(true)
+    try {
+      const baseUrl = `http://localhost:8081`
+      const res = await fetch(`${baseUrl}/api/ouvrages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titre: newTitre.trim(),
+          auteurId: parseInt(newAuteurId),
+          editeur: "Non renseigné",
+          annee: new Date().getFullYear(),
+          domaine: newDomaine.trim() || "Non renseigné",
+          stock: parseInt(newStock) || 1,
+          site: site
+        })
+      })
+      
+      if (!res.ok) throw new Error("Erreur lors de la création")
+      
+      toast.success("Ouvrage ajouté avec succès")
+      setIsDialogOpen(false)
+      resetForm()
+      ouvrages.mutate()
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const openEditDialog = (ouvrage: any) => {
+    setSelectedOuvrage(ouvrage)
+    setEditTitre(ouvrage.titre || "")
+    setEditAuteurId(String(ouvrage.auteurId || ""))
+    setEditDomaine(ouvrage.domaine || "")
+    setEditStock(String(ouvrage.stock || 1))
+    setIsEditDialogOpen(true)
+  }
+
+  const handleEditOuvrage = async () => {
+    if (!editTitre.trim() || !editAuteurId) {
+      toast.error("Veuillez remplir tous les champs obligatoires")
+      return
+    }
+    
+    setSaving(true)
+    try {
+      const baseUrl = `http://localhost:8081`
+      const id = selectedOuvrage.idOuv || selectedOuvrage.id
+      const res = await fetch(`${baseUrl}/api/ouvrages/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titre: editTitre.trim(),
+          auteurId: parseInt(editAuteurId),
+          editeur: selectedOuvrage.editeur || "Non renseigné",
+          annee: selectedOuvrage.annee || new Date().getFullYear(),
+          domaine: editDomaine.trim() || "Non renseigné",
+          stock: parseInt(editStock) || 1,
+          site: site
+        })
+      })
+      
+      if (!res.ok) throw new Error("Erreur lors de la modification")
+      
+      toast.success("Ouvrage modifié avec succès")
+      setIsEditDialogOpen(false)
+      resetEditForm()
+      ouvrages.mutate()
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const openDeleteDialog = (ouvrage: any) => {
+    setSelectedOuvrage(ouvrage)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const handleDeleteOuvrage = async () => {
+    setDeleting(true)
+    try {
+      const baseUrl = `http://localhost:8081`
+      const id = selectedOuvrage.idOuv || selectedOuvrage.id
+      const res = await fetch(`${baseUrl}/api/ouvrages/${id}`, {
+        method: 'DELETE'
+      })
+      
+      if (!res.ok) throw new Error("Erreur lors de la suppression")
+      
+      toast.success("Ouvrage supprimé avec succès")
+      setIsDeleteDialogOpen(false)
+      setSelectedOuvrage(null)
+      ouvrages.mutate()
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -121,7 +262,7 @@ function Ouvrages() {
             <SiteBadge site={site} className="px-3 py-1 text-sm" />
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" variant="default">
+                <Button size="sm" variant="default" onClick={resetForm}>
                   <Plus className="size-4 mr-1" />
                   Ajouter
                 </Button>
@@ -144,21 +285,44 @@ function Ouvrages() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="auteur">Auteur</Label>
-                    <Input
-                      id="auteur"
-                      placeholder="Nom de l'auteur"
-                      value={newAuteur}
-                      onChange={(e) => setNewAuteur(e.target.value)}
-                    />
+                    <Label htmlFor="auteur">Auteur *</Label>
+                    <Select value={newAuteurId} onValueChange={setNewAuteurId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choisir un auteur" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {auteurs.data && auteurs.data.length > 0 ? (
+                          auteurs.data.map((a: any) => (
+                            <SelectItem key={a.idAut || a.id} value={String(a.idAut || a.id)}>
+                              {a.nomAuteur || a.nom || "Inconnu"}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            Aucun auteur disponible. Créez d'abord un auteur.
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="domaine">Domaine</Label>
                     <Input
                       id="domaine"
-                      placeholder="Domaine"
+                      placeholder="Domaine (ex: Littérature, Histoire...)"
                       value={newDomaine}
                       onChange={(e) => setNewDomaine(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="stock">Stock *</Label>
+                    <Input
+                      id="stock"
+                      type="number"
+                      min="0"
+                      placeholder="Nombre d'exemplaires"
+                      value={newStock}
+                      onChange={(e) => setNewStock(e.target.value)}
                     />
                   </div>
                 </div>
@@ -166,8 +330,8 @@ function Ouvrages() {
                   <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Annuler
                   </Button>
-                  <Button onClick={handleAjouterOuvrage}>
-                    Ajouter
+                  <Button onClick={handleAjouterOuvrage} disabled={saving || !newTitre.trim() || !newAuteurId}>
+                    {saving ? "Ajout..." : "Ajouter"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -274,46 +438,71 @@ function Ouvrages() {
                   <TableHead>Site</TableHead>
                   <TableHead className="text-center">Stock</TableHead>
                   <TableHead className="text-center">Statut</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {ouvrages.data && ouvrages.data.length > 0 ? (
-                  ouvrages.data.map((o, index) => (
-                    <TableRow key={getKey(o, index)}>
-                      <TableCell className="font-mono text-muted-foreground text-xs">
-                        {o.id || "—"}
-                      </TableCell>
-                      <TableCell className="font-medium">{o.titre || "Sans titre"}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {getAuteurNom(o.auteurId)}
-                      </TableCell>
-                      <TableCell>
-                        <SiteBadge site={o.site} />
-                      </TableCell>
-                      <TableCell className="text-center font-mono">
-                        <Badge variant={getStock(o) > 0 ? "default" : "destructive"} className="gap-1">
-                          <Package className="size-3" />
-                          {getStock(o)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {o.disponible ? (
-                          <Badge variant="default" className="gap-1">
-                            <CheckCircle2 className="size-3" />
-                            Disponible
+                  ouvrages.data.map((o, index) => {
+                    const ouvId = o.idOuv || o.id
+                    return (
+                      <TableRow key={getKey(o, index)}>
+                        <TableCell className="font-mono text-muted-foreground text-xs">
+                          {ouvId || "—"}
+                        </TableCell>
+                        <TableCell className="font-medium">{o.titre || "Sans titre"}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {getAuteurNom(o.auteurId)}
+                        </TableCell>
+                        <TableCell>
+                          <SiteBadge site={o.site} />
+                        </TableCell>
+                        <TableCell className="text-center font-mono">
+                          <Badge variant={getStock(o) > 0 ? "default" : "destructive"} className="gap-1">
+                            <Package className="size-3" />
+                            {getStock(o)}
                           </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="gap-1">
-                            <XCircle className="size-3" />
-                            Emprunté
-                          </Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {o.disponible ? (
+                            <Badge variant="default" className="gap-1">
+                              <CheckCircle2 className="size-3" />
+                              Disponible
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="gap-1">
+                              <XCircle className="size-3" />
+                              Emprunté
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditDialog(o)}
+                              title="Modifier"
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() => openDeleteDialog(o)}
+                              title="Supprimer"
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
                       Aucun ouvrage dans ce fragment.
                     </TableCell>
                   </TableRow>
@@ -323,6 +512,93 @@ function Ouvrages() {
           </DataState>
         </CardContent>
       </Card>
+
+      {/* Dialog Modifier */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifier l'ouvrage</DialogTitle>
+            <DialogDescription>
+              Modifier les informations de l'ouvrage.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="edit-titre">Titre *</Label>
+              <Input
+                id="edit-titre"
+                value={editTitre}
+                onChange={(e) => setEditTitre(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-auteur">Auteur *</Label>
+              <Select value={editAuteurId} onValueChange={setEditAuteurId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choisir un auteur" />
+                </SelectTrigger>
+                <SelectContent>
+                  {auteurs.data && auteurs.data.length > 0 ? (
+                    auteurs.data.map((a: any) => (
+                      <SelectItem key={a.idAut || a.id} value={String(a.idAut || a.id)}>
+                        {a.nomAuteur || a.nom || "Inconnu"}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Aucun auteur disponible.
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-domaine">Domaine</Label>
+              <Input
+                id="edit-domaine"
+                value={editDomaine}
+                onChange={(e) => setEditDomaine(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-stock">Stock *</Label>
+              <Input
+                id="edit-stock"
+                type="number"
+                min="0"
+                value={editStock}
+                onChange={(e) => setEditStock(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button onClick={handleEditOuvrage} disabled={saving || !editTitre.trim() || !editAuteurId}>
+              {saving ? "Modification..." : "Modifier"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AlertDialog Supprimer */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action supprimera définitivement l&apos;ouvrage &quot;{selectedOuvrage?.titre || "sans titre"}&quot;.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteOuvrage} className="bg-red-600 hover:bg-red-700">
+              {deleting ? "Suppression..." : "Supprimer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
