@@ -22,6 +22,13 @@ import {
 import { SITE_CODES } from "@/lib/config"
 import type { Etudiant, SiteCode } from "@/lib/types"
 
+// URLs des sites
+const SITE_URLS: Record<string, string> = {
+  UGB: "http://localhost:8082",
+  UCAD: "http://localhost:8081",
+  UADB: "http://localhost:8083",
+}
+
 export default function EmpruntsPage() {
   return (
     <AppShell>
@@ -34,8 +41,9 @@ type TxState = "idle" | "running" | "done" | "error"
 
 function Emprunts() {
   const { site, api } = useSite()
+  const [siteOuvrage, setSiteOuvrage] = useState<SiteCode>(site)
 
-  const ouvrages = useResource("ouvrages", (a) => a.getOuvrages(site))
+  const ouvrages = useResource(`ouvrages-${siteOuvrage}`, (a) => a.getOuvrages(siteOuvrage))
   const [univEtudiant, setUnivEtudiant] = useState<SiteCode>(site)
   const etudiants = useResource(
     `etudiants-${univEtudiant}`,
@@ -51,7 +59,7 @@ function Emprunts() {
   const ouvragesNormalises = ouvrages.data?.map((o: any) => ({
     ...o,
     id: o.idOuv || o.id,
-    disponible: o.stock > 0 || o.disponible === true,
+    disponible: o.stock > 0,
     titre: o.titre || "Sans titre",
     affichage: `${o.titre || "Sans titre"} (Stock: ${o.stock || 0})`
   })) ?? []
@@ -67,7 +75,7 @@ function Emprunts() {
     affichage: `${e.nom || "Inconnu"} ${e.prenom || ""} (ID: ${e.idEtud || e.id})`
   })) ?? []
 
-  const distant = univEtudiant !== site
+  const distant = univEtudiant !== siteOuvrage
 
   async function submit() {
     const etu = etudiantsNormalises.find((e) => String(e.id) === idEtudiant)
@@ -81,8 +89,7 @@ function Emprunts() {
     setTxMsg("")
     
     try {
-      // Utiliser l'API directement avec fetch pour avoir plus de contrôle
-      const baseUrl = `http://localhost:8081` // site actuel (UCAD)
+      const baseUrl = SITE_URLS[siteOuvrage]
       const response = await fetch(`${baseUrl}/api/prets/emprunter`, {
         method: 'POST',
         headers: {
@@ -125,7 +132,7 @@ function Emprunts() {
         description="Enregistrer un emprunt. Le prêt est traité par le site de l'ouvrage ; si l'étudiant relève d'une autre université, une transaction distribuée ajuste son compteur à distance."
         actions={
           <span className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Server className="size-4" /> Site traitant <SiteBadge site={site} />
+            <Server className="size-4" /> Site traitant <SiteBadge site={siteOuvrage} />
           </span>
         }
       />
@@ -137,10 +144,32 @@ function Emprunts() {
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-1.5">
-              <Label>Ouvrage disponible (détenu par {site})</Label>
+              <Label>Site de l&apos;ouvrage</Label>
+              <Select
+                value={siteOuvrage}
+                onValueChange={(v) => {
+                  setSiteOuvrage(v as SiteCode)
+                  setIdOuvrage("")
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SITE_CODES.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c} {c === site ? "(local)" : "(distant)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Ouvrage disponible (détenu par {siteOuvrage})</Label>
               <Select value={idOuvrage} onValueChange={setIdOuvrage}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Choisir un ouvrage" />
+                  <SelectValue placeholder={ouvrages.isLoading ? "Chargement…" : "Choisir un ouvrage"} />
                 </SelectTrigger>
                 <SelectContent>
                   {disponibles.map((o) => (
@@ -149,7 +178,9 @@ function Emprunts() {
                     </SelectItem>
                   ))}
                   {disponibles.length === 0 && (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">Aucun ouvrage disponible</div>
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Aucun ouvrage disponible sur {siteOuvrage}
+                    </div>
                   )}
                 </SelectContent>
               </Select>
@@ -170,7 +201,7 @@ function Emprunts() {
                 <SelectContent>
                   {SITE_CODES.map((c) => (
                     <SelectItem key={c} value={c}>
-                      {c} {c === site ? "(local)" : "(distant)"}
+                      {c} {c === siteOuvrage ? "(local)" : "(distant)"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -217,14 +248,14 @@ function Emprunts() {
               )}
             </div>
 
-            <Button className="w-full" onClick={submit} disabled={tx === "running"}>
+            <Button className="w-full" onClick={submit} disabled={tx === "running" || disponibles.length === 0}>
               {tx === "running" ? <Loader2 className="size-4 animate-spin" /> : <ArrowLeftRight className="size-4" />}
               {tx === "running" ? "Traitement…" : "Enregistrer l'emprunt"}
             </Button>
           </CardContent>
         </Card>
 
-        <SagaPanel state={tx} distant={distant} processing={site} etudiantSite={univEtudiant} errorMsg={txMsg} />
+        <SagaPanel state={tx} distant={distant} processing={siteOuvrage} etudiantSite={univEtudiant} errorMsg={txMsg} />
       </div>
     </>
   )
