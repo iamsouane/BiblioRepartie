@@ -1,3 +1,4 @@
+// frontend/app/ouvrages/page.tsx
 "use client"
 
 import { useState } from "react"
@@ -67,8 +68,10 @@ export default function OuvragesPage() {
 }
 
 function Ouvrages() {
-  const { site } = useSite()
+  const { site, api } = useSite() // Ajout de api
   const [searchTerm, setSearchTerm] = useState("")
+  const [searchResults, setSearchResults] = useState<any[] | null>(null)
+  const [searching, setSearching] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -86,10 +89,6 @@ function Ouvrages() {
   
   const ouvrages = useResource("ouvrages", (a) => a.getOuvrages(site))
   const auteurs = useResource("auteurs", (a) => a.getAuteurs(site))
-  const rechercheGlobale = useResource(
-    "recherche-globale",
-    (a) => searchTerm.length > 0 ? a.rechercheGlobale(site, searchTerm) : Promise.resolve([])
-  )
 
   const getAuteurNom = (auteurId: any) => {
     if (!auteurId) return "—"
@@ -126,6 +125,36 @@ function Ouvrages() {
 
   const getKey = (item: any, index: number) => {
     return item?.id || item?.idOuv || `item-${index}`
+  }
+
+  // Fonction de recherche
+  async function handleSearch(e?: React.FormEvent) {
+    e?.preventDefault()
+    if (!searchTerm.trim()) {
+      toast.error("Saisissez un terme à rechercher")
+      return
+    }
+    setSearching(true)
+    try {
+      const res = await api.rechercheGlobale(site, searchTerm.trim())
+      console.log("Résultats recherche:", res)
+      setSearchResults(res)
+    } catch (err) {
+      console.error("Erreur:", err)
+      toast.error((err as Error).message)
+      setSearchResults([])
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  // Réinitialiser les résultats quand le terme change
+  function handleSearchTermChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value
+    setSearchTerm(value)
+    if (value === "") {
+      setSearchResults(null)
+    }
   }
 
   const resetForm = () => {
@@ -340,87 +369,86 @@ function Ouvrages() {
         }
       />
 
-      {/* Barre de recherche */}
+      {/* Barre de recherche - CORRIGÉE */}
       <Card className="mb-4">
         <CardContent className="flex flex-col sm:flex-row gap-3 p-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Rechercher un ouvrage sur l'ensemble des sites..."
-              className="pl-9"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <Button variant="outline" size="sm">
-            <Search className="size-4 mr-1" />
-            Recherche globale
-          </Button>
+          <form onSubmit={handleSearch} className="flex flex-1 gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher un ouvrage sur l'ensemble des sites..."
+                className="pl-9"
+                value={searchTerm}
+                onChange={handleSearchTermChange}
+              />
+            </div>
+            <Button type="submit" variant="default" size="sm" disabled={searching}>
+              {searching ? "Recherche..." : "Recherche globale"}
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
       {/* Résultats recherche */}
-      {searchTerm.length > 0 && (
+      {searchResults !== null && (
         <Card className="mb-4">
           <CardContent className="p-4">
             <h3 className="text-sm font-semibold mb-3">
-              🌐 Résultats globaux ({rechercheGlobale.data?.length || 0})
+              🌐 Résultats globaux ({searchResults.length})
             </h3>
-            <DataState isLoading={rechercheGlobale.isLoading} error={rechercheGlobale.error}>
-              {rechercheGlobale.data && rechercheGlobale.data.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[80px]">ID</TableHead>
-                      <TableHead>Titre</TableHead>
-                      <TableHead>Auteur</TableHead>
-                      <TableHead>Détenu par</TableHead>
-                      <TableHead className="text-center">Stock</TableHead>
-                      <TableHead className="text-center">Statut</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rechercheGlobale.data.map((o, index) => (
-                      <TableRow key={getKey(o, index)}>
-                        <TableCell className="font-mono text-muted-foreground text-xs">
-                          {o.id || o.idOuv || "—"}
-                        </TableCell>
-                        <TableCell className="font-medium">{getTitre(o)}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {getAuteurNom(o.auteurId || o.idAuteur)}
-                        </TableCell>
-                        <TableCell>
-                          <SiteBadge site={getSiteDisplay(o)} />
-                        </TableCell>
-                        <TableCell className="text-center font-mono">
-                          <Badge variant={getStock(o) > 0 ? "default" : "destructive"} className="gap-1">
-                            <Package className="size-3" />
-                            {getStock(o)}
+            {searchResults.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[80px]">ID</TableHead>
+                    <TableHead>Titre</TableHead>
+                    <TableHead>Auteur</TableHead>
+                    <TableHead>Détenu par</TableHead>
+                    <TableHead className="text-center">Stock</TableHead>
+                    <TableHead className="text-center">Statut</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {searchResults.map((o, index) => (
+                    <TableRow key={getKey(o, index)}>
+                      <TableCell className="font-mono text-muted-foreground text-xs">
+                        {o.idOuv || o.id || "—"}
+                      </TableCell>
+                      <TableCell className="font-medium">{getTitre(o)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {getAuteurNom(o.auteurId || o.idAuteur)}
+                      </TableCell>
+                      <TableCell>
+                        <SiteBadge site={getSiteDisplay(o)} />
+                      </TableCell>
+                      <TableCell className="text-center font-mono">
+                        <Badge variant={getStock(o) > 0 ? "default" : "destructive"} className="gap-1">
+                          <Package className="size-3" />
+                          {getStock(o)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {getDisponible(o) ? (
+                          <Badge variant="default" className="gap-1">
+                            <CheckCircle2 className="size-3" />
+                            Disponible
                           </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {getDisponible(o) ? (
-                            <Badge variant="default" className="gap-1">
-                              <CheckCircle2 className="size-3" />
-                              Disponible
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="gap-1">
-                              <XCircle className="size-3" />
-                              Emprunté
-                            </Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Aucun résultat pour "{searchTerm}"
-                </p>
-              )}
-            </DataState>
+                        ) : (
+                          <Badge variant="secondary" className="gap-1">
+                            <XCircle className="size-3" />
+                            Emprunté
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Aucun résultat pour "{searchTerm}"
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
